@@ -172,20 +172,27 @@ typedef struct redisContext {
 
 } redisContext;
 
-redisContext *redisConnect(const char *ip, int port, int ssl, char* CAfile,
-                             char* certfile, char* keyfile, char *certdir);
+redisContext *redisConnect(const char *ip, int port, int ssl,
+        char* certfile, char* keyfile,
+        char* CAfile, char* certdir);
 
-redisContext *redisConnectWithTimeout(const char *ip, int port, const struct timeval tv, int ssl, char* CAfile, 
-                             char* certfile, char* keyfile, char *certdir);
+redisContext *redisConnectWithTimeout(const char *ip, int port, const struct timeval tv, int ssl,
+        char* certfile, char* keyfile, 
+        char* CAfile, char* certdir);
 
-redisContext *redisConnectNonBlock(const char *ip, int port, int ssl, char* CAfile, 
-                             char* certfile, char* keyfile, char *certdir);
+redisContext *redisConnectNonBlock(const char *ip, int port, int ssl,
+        char* certfile, char* keyfile,
+        char* CAfile, char* certdir);
 
-redisContext *redisConnectBindNonBlock(const char *ip, int port, const char *source_addr, 
-                             int ssl, char* CAfile, char* certfile, char* keyfile, char *certdir);
+redisContext *redisConnectBindNonBlock(const char *ip, int port, const char *source_addr,
+        int ssl,
+        char* certfile, char* keyfile,
+        char* CAfile, char* certdir);
 
 redisContext *redisConnectBindNonBlockWithReuse(const char *ip, int port, const char *source_addr,
-                             int ssl, char* CAfile, char* certfile, char* keyfile, char *certdir);
+        int ssl,
+        char* certfile, char* keyfile,
+        char* CAfile, char* certdir);
 
 redisContext *redisConnectUnix(const char *path);
 redisContext *redisConnectUnixWithTimeout(const char *path, const struct timeval tv);

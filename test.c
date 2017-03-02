@@ -29,6 +29,14 @@ struct config {
     } tcp;
 
     struct {
+        int enable;
+        const char *certfile;
+        const char *keyfile;
+        const char *cafile;
+        const char *certdir;
+    } ssl;
+
+    struct {
         const char *path;
     } unix_sock;
 };
@@ -94,8 +102,11 @@ static int disconnect(redisContext *c, int keep_fd) {
 static redisContext *connect(struct config config) {
     redisContext *c = NULL;
 
+    printf("certfile: %s, keyfile %s, cafile %s, certdir %s\n", config.ssl.certfile, config.ssl.keyfile, config.ssl.cafile, config.ssl.certdir);
+
     if (config.type == CONN_TCP) {
-        c = redisConnect(config.tcp.host, config.tcp.port, 0, NULL, NULL, NULL, NULL);
+        c = redisConnect(config.tcp.host, config.tcp.port, config.ssl.enable, config.ssl.certfile, config.ssl.keyfile,
+                config.ssl.cafile, config.ssl.certdir);
     } else if (config.type == CONN_UNIX) {
         c = redisConnectUnix(config.unix_sock.path);
     } else if (config.type == CONN_FD) {
@@ -566,8 +577,9 @@ static void test_invalid_timeout_errors(struct config config) {
     config.tcp.timeout.tv_sec = 0;
     config.tcp.timeout.tv_usec = 10000001;
 
-    c = redisConnectWithTimeout(config.tcp.host, config.tcp.port, config.tcp.timeout, 0, NULL, NULL, NULL, NULL);
-
+    c = redisConnectWithTimeout(config.tcp.host, config.tcp.port, config.tcp.timeout, config.ssl.enable,
+            config.ssl.certfile, config.ssl.keyfile,
+            config.ssl.cafile, config.ssl.certdir);
     test_cond(c->err == REDIS_ERR_IO && strcmp(c->errstr, "Invalid timeout specified") == 0);
     redisFree(c);
 
@@ -576,7 +588,9 @@ static void test_invalid_timeout_errors(struct config config) {
     config.tcp.timeout.tv_sec = (((LONG_MAX) - 999) / 1000) + 1;
     config.tcp.timeout.tv_usec = 0;
 
-    c = redisConnectWithTimeout(config.tcp.host, config.tcp.port, config.tcp.timeout, 0, NULL, NULL, NULL, NULL);
+    c = redisConnectWithTimeout(config.tcp.host, config.tcp.port, config.tcp.timeout, config.ssl.enable,
+            config.ssl.certfile, config.ssl.keyfile,
+            config.ssl.cafile, config.ssl.certdir);
 
     test_cond(c->err == REDIS_ERR_IO && strcmp(c->errstr, "Invalid timeout specified") == 0);
     redisFree(c);
@@ -774,6 +788,20 @@ int main(int argc, char **argv) {
         } else if (argc >= 2 && !strcmp(argv[0],"-s")) {
             argv++; argc--;
             cfg.unix_sock.path = argv[0];
+        } else if (argc >= 2 && !strcmp(argv[0], "-k")) {
+            argv++; argc--;
+            cfg.ssl.keyfile = argv[0];
+        } else if (argc >= 2 && !strcmp(argv[0], "-c")) {
+            argv++; argc--;
+            cfg.ssl.certfile = argv[0];
+        } else if (argc >= 2 && !strcmp(argv[0], "-a")) {
+            argv++; argc--;
+            cfg.ssl.cafile = argv[0];
+        } else if (argc >= 2 && !strcmp(argv[0], "-d")) {
+            argv++; argc--;
+            cfg.ssl.certdir = argv[0];
+        } else if (argc == 1 && !strcmp(argv[0], "--enable-ssl")) {
+            cfg.ssl.enable = 1;
         } else if (argc >= 1 && !strcmp(argv[0],"--skip-throughput")) {
             throughput = 0;
         } else if (argc >= 1 && !strcmp(argv[0],"--skip-inherit-fd")) {
