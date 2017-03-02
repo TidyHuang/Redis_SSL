@@ -685,7 +685,6 @@ redisContext *redisConnect(const char *ip, int port, int ssl, char* CAfile,
     c->flags |= REDIS_BLOCK;
 
     if (ssl) {
-        setupSSL();
         redisContextConnectSSL(c,ip,port,NULL,certfile,keyfile,CAfile,certdir);
     } else {
         redisContextConnectTcp(c,ip,port,NULL);
@@ -704,7 +703,6 @@ redisContext *redisConnectWithTimeout(const char *ip, int port, const struct tim
     c->flags |= REDIS_BLOCK;
 
     if (ssl) {
-        setupSSL();
         redisContextConnectSSL(c,ip,port,NULL,certfile,keyfile,CAfile,certdir);
     } else {
         redisContextConnectTcp(c,ip,port,NULL);
@@ -723,7 +721,6 @@ redisContext *redisConnectNonBlock(const char *ip, int port, int ssl, char *cert
     c->flags &= ~REDIS_BLOCK;
 
     if (ssl) {
-        setupSSL();
         redisContextConnectSSL(c,ip,port,NULL,certfile,keyfile,CAfile,certdir);
     } else {
         redisContextConnectTcp(c,ip,port,NULL);
@@ -739,7 +736,6 @@ redisContext *redisConnectBindNonBlock(const char *ip, int port,
     c->flags &= ~REDIS_BLOCK;
 
     if (ssl) {
-        setupSSL();
         redisContextConnectSSL(c, ip, port, NULL, certfile, keyfile, CAfile, certdir);
     } else {
         redisContextConnectBindTcp(c,ip,port,NULL,source_addr);
@@ -756,7 +752,6 @@ redisContext *redisConnectBindNonBlockWithReuse(const char *ip, int port,
     c->flags |= REDIS_REUSEADDR;
 
     if (ssl) {
-        setupSSL();
         redisContextConnectSSL(c, ip, port, NULL, certfile, keyfile, CAfile, certdir);
     } else {
         redisContextConnectBindTcp(c,ip,port,NULL,source_addr);

@@ -467,9 +467,11 @@ int redisContextConnectBindTcp(redisContext *c, const char *addr, int port,
         ERR_error_string(sizeof(errorbuf), errorbuf);\
         __redisSetError(c, err_type, err_msg)
 
-int init_ssl_ctx(redisContext *c, char *certfile, char *keyfile, char *CAfile, char *certdir)
+int init_SSL(redisContext *c, char *certfile, char *keyfile, char *CAfile, char *certdir)
 {
-       // Set up a SSL_CTX object, which will tell our BIO object how to do its work
+    // Set up a SSL_CTX object, which will tell our BIO object how to do its work
+    setupSSL();
+
     SSL_CTX *ctx = SSL_CTX_new(TLSv1_client_method());
     if (ctx == NULL) {
         return REDIS_ERR;
@@ -552,7 +554,7 @@ int redisContextConnectSSL(redisContext *c, const char* addr, int port, struct t
     c->ssl.ssl = NULL;
     c->ssl.bio = NULL;
 
-    if (init_ssl_ctx(c, certfile, keyfile, CAfile, certdir) != REDIS_OK) {
+    if (init_SSL(c, certfile, keyfile, CAfile, certdir) != REDIS_OK) {
         cleanupSSL(&c->ssl);
         return REDIS_ERR;
     }
