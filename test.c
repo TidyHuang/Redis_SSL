@@ -130,7 +130,9 @@ static redisContext *connect(struct config config) {
         exit(1);
     }
 
-    return select_database(c);
+    return c;
+
+    //return select_database(c);
 }
 
 static void test_format_commands(void) {
@@ -800,14 +802,14 @@ int main(int argc, char **argv) {
         } else if (argc >= 2 && !strcmp(argv[0], "-d")) {
             argv++; argc--;
             cfg.ssl.certdir = argv[0];
-        } else if (argc == 1 && !strcmp(argv[0], "--enable-ssl")) {
+        } else if (argc >= 1 && !strcmp(argv[0], "--enable-ssl")) {
             cfg.ssl.enable = 1;
         } else if (argc >= 1 && !strcmp(argv[0],"--skip-throughput")) {
             throughput = 0;
         } else if (argc >= 1 && !strcmp(argv[0],"--skip-inherit-fd")) {
             test_inherit_fd = 0;
         } else {
-            fprintf(stderr, "Invalid argument: %s\n", argv[0]);
+            fprintf(stderr, "Invalid argument: %s\ argc %d\n", argv[0], argc);
             exit(1);
         }
         argv++; argc--;

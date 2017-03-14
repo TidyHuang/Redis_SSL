@@ -480,14 +480,12 @@ int init_SSL(redisContext *c, char *certfile, char *keyfile, char *CAfile, char 
     c->ssl.ctx = ctx;
     if (certfile) {
         if (SSL_CTX_use_certificate_file(ctx, certfile, SSL_FILETYPE_PEM) <= 0) {
-            printf("cert file %s\n", certfile);
             FILL_SSL_ERR_MSG(c, REDIS_ERR_OTHER, "SSL Error: Load client cert\n");
             return REDIS_ERR;
         }
 
         if (!keyfile) keyfile = certfile;
         if (SSL_CTX_use_PrivateKey_file(ctx, keyfile, SSL_FILETYPE_PEM) <= 0) {
-            printf("private key file %s\n", keyfile);
             FILL_SSL_ERR_MSG(c, REDIS_ERR_OTHER, "SSL Error: Load client private key\n");
             return REDIS_ERR;
         }
@@ -495,11 +493,11 @@ int init_SSL(redisContext *c, char *certfile, char *keyfile, char *CAfile, char 
             FILL_SSL_ERR_MSG(c, REDIS_ERR_OTHER, "SSL Error:  Check cert/key pair\n");
             return REDIS_ERR;
         }
-        SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
-        SSL_CTX_set_verify_depth(ctx, 4);
+        //SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+        //SSL_CTX_set_verify_depth(ctx, 4);
     }
 
-    SSL_CTX_load_verify_locations(ctx, CAfile, certdir);
+    int status = SSL_CTX_load_verify_locations(ctx, CAfile, certdir);
 
     return REDIS_OK;
 }
@@ -563,23 +561,22 @@ int redisContextConnectSSL(redisContext *c, const char* addr, int port, struct t
     }
 
     // Create our BIO object for SSL connections.
-    BIO *bio = BIO_new_ssl_connect(c->ssl.ctx);
+    BIO *bio = BIO_new_ssl_connect(ctx);
     if (bio == NULL) {
         FILL_SSL_ERR_MSG(c, REDIS_ERR_OTHER, "SSL Error:  Create BIO fail");
         // We need to free up the SSL_CTX before we leave.
         cleanupSSL(&c->ssl);
         return REDIS_ERR;
     }
-    c->ssl.bio = bio;
-
     // Create a SSL object pointer, which our BIO object will provide.
     SSL *ssl = NULL;
     BIO_get_ssl(bio, &ssl);
-    c->ssl.ssl = ssl;
-
-    // Set the SSL to automatically retry on failure.
     SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
 
+    c->ssl.ssl = ssl;
+    c->ssl.bio = bio;
+
+    // Set the SSL to automatically retry on failure.
     char *connect_str = (char*)calloc(1, strlen(addr) + 10);
     sprintf(connect_str, "%s:%d", addr, port);
 
@@ -620,6 +617,10 @@ int redisContextConnectSSL(redisContext *c, const char* addr, int port, struct t
                     cleanupSSL( &(c->ssl) );
                     return REDIS_ERR;
                 }
+            } else {
+                FILL_SSL_ERR_MSG(c, REDIS_ERR_OTHER,"SSL Error: Failed to connect");
+                cleanupSSL(&(c->ssl));
+                return REDIS_ERR;
             }
         } else {
             // connect is done...
@@ -680,7 +681,11 @@ int redisContextConnectSSL(redisContext *c, const char* addr, int port, struct t
         return REDIS_ERR;
     }
 
+    printf("verify done");
+
     BIO_set_nbio(bio,is_nonblocking);
+
+    FILL_SSL_ERR_MSG(c, REDIS_OK, "SSL Connection finished");
 
     return REDIS_OK;
 }
