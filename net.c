@@ -561,7 +561,7 @@ int redisContextConnectSSL(redisContext *c, const char* addr, int port, struct t
     }
 
     // Create our BIO object for SSL connections.
-    BIO *bio = BIO_new_ssl_connect(ctx);
+    BIO *bio = BIO_new_ssl_connect(c->ssl.ctx);
     if (bio == NULL) {
         FILL_SSL_ERR_MSG(c, REDIS_ERR_OTHER, "SSL Error:  Create BIO fail");
         // We need to free up the SSL_CTX before we leave.
