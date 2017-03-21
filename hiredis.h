@@ -136,7 +136,8 @@ void redisFreeSdsCommand(sds cmd);
 
 enum redisConnectionType {
     REDIS_CONN_TCP,
-    REDIS_CONN_UNIX
+    REDIS_CONN_UNIX,
+    REDIS_CONN_SSL
 };
 
 typedef struct SSLConnection { 
@@ -171,6 +172,17 @@ typedef struct redisContext {
     } unix_sock;
 
 } redisContext;
+
+/*API for SSL and can save global context for each connection */
+redisContext *redisConnectContextInit(int ssl, const char *certfile, const char *keyfile, 
+        const char *CAfile, const char *certdir);
+
+int redisConnectEstab(redisContext *ctx, const char *ip, int port, const struct timeval tv);
+
+int redisConnectClose(redisContext *ctx);
+
+void redisConnectContextUninit(redisContext *c);
+/* ----------------------------------------------------------*/
 
 redisContext *redisConnect(const char *ip, int port, int ssl,
         char* certfile, char* keyfile,

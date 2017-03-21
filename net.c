@@ -467,39 +467,43 @@ int redisContextConnectBindTcp(redisContext *c, const char *addr, int port,
         ERR_error_string(sizeof(errorbuf), errorbuf);\
         __redisSetError(c, err_type, err_msg)
 
-int init_SSL(redisContext *c, char *certfile, char *keyfile, char *CAfile, char *certdir)
+int initSSLCtx(SSLConnection *ssl, const char *certfile, const char *keyfile,
+        const char *CAfile, const char *certdir)
 {
     // Set up a SSL_CTX object, which will tell our BIO object how to do its work
     setupSSL();
 
+    ssl->sd = -1;
+    ssl->ctx = NULL;
+    ssl->ssl = NULL;
+    ssl->bio = NULL;
+
     SSL_CTX *ctx = SSL_CTX_new(TLSv1_client_method());
     if (ctx == NULL) {
-        return REDIS_ERR;
+        return INIT_SSL_CTX_ERR;
     }
 
-    c->ssl.ctx = ctx;
     if (certfile) {
         if (SSL_CTX_use_certificate_file(ctx, certfile, SSL_FILETYPE_PEM) <= 0) {
-            FILL_SSL_ERR_MSG(c, REDIS_ERR_OTHER, "SSL Error: Load client cert\n");
-            return REDIS_ERR;
+            return INIT_SSL_CERT_ERR;
         }
 
         if (!keyfile) keyfile = certfile;
         if (SSL_CTX_use_PrivateKey_file(ctx, keyfile, SSL_FILETYPE_PEM) <= 0) {
-            FILL_SSL_ERR_MSG(c, REDIS_ERR_OTHER, "SSL Error: Load client private key\n");
-            return REDIS_ERR;
+            return INIT_SSL_KEY_ERR;
         }
         if (SSL_CTX_check_private_key(ctx) <= 0) {
-            FILL_SSL_ERR_MSG(c, REDIS_ERR_OTHER, "SSL Error:  Check cert/key pair\n");
-            return REDIS_ERR;
+            return INIT_SSL_CERT_VERIFY_ERR;
         }
-        //SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
-        //SSL_CTX_set_verify_depth(ctx, 4);
     }
 
-    int status = SSL_CTX_load_verify_locations(ctx, CAfile, certdir);
+    if (SSL_CTX_load_verify_locations(ctx, CAfile, certdir) == 0) {
+        return INIT_SSL_VERIFY_LOCATION_ERR;
+    }
 
-    return REDIS_OK;
+    ssl->ctx = ctx;
+
+    return 0;
 }
 
 /*  Return -1 on hard error (abort), 0 on timeout, >= 1 on successful wakeup */
@@ -541,33 +545,19 @@ _BIO_wait(BIO *cbio, int msecs)
     return (pfd.revents & pfd.events ? 1 : -1);
 }
 
-int redisContextConnectSSL(redisContext *c, const char* addr, int port, struct timeval *timeout,
-        char *certfile, char *keyfile,
-        char *CAfile, char *certdir) {
-
-    printf("certfile %s, keyfile %s, cafile %s, cerdir %s\n", certfile, keyfile, CAfile, certdir);
+int redisContextConnectSSL(redisContext *c, const char* addr, int port, const struct timeval *timeout)
+{
     struct timeval  start_time;
     int             has_timeout = 0;
     int             is_nonblocking = 0;
-
-    c->ssl.sd = -1;
-    c->ssl.ctx = NULL;
-    c->ssl.ssl = NULL;
-    c->ssl.bio = NULL;
-
-    if (init_SSL(c, certfile, keyfile, CAfile, certdir) != REDIS_OK) {
-        cleanupSSL(&c->ssl);
-        return REDIS_ERR;
-    }
 
     // Create our BIO object for SSL connections.
     BIO *bio = BIO_new_ssl_connect(c->ssl.ctx);
     if (bio == NULL) {
         FILL_SSL_ERR_MSG(c, REDIS_ERR_OTHER, "SSL Error:  Create BIO fail");
-        // We need to free up the SSL_CTX before we leave.
-        cleanupSSL(&c->ssl);
         return REDIS_ERR;
     }
+
     // Create a SSL object pointer, which our BIO object will provide.
     SSL *ssl = NULL;
     BIO_get_ssl(bio, &ssl);
@@ -599,11 +589,10 @@ int redisContextConnectSSL(redisContext *c, const char* addr, int port, struct t
         int time_left;
         if (has_timeout) {
             gettimeofday(&cur_time, NULL);
-            elapsed_time = subtractTimeval( cur_time, start_time );
+            elapsed_time = subtractTimeval(cur_time, start_time);
 
-            if (compareTimeval( elapsed_time, *timeout) > 0) {
+            if (compareTimeval(elapsed_time, *timeout) > 0) {
                 FILL_SSL_ERR_MSG(c, REDIS_ERR_OTHER, "SSL Error: Connection timed out.");
-                cleanupSSL( &(c->ssl) );
                 return REDIS_ERR;
             }
         }
@@ -614,12 +603,10 @@ int redisContextConnectSSL(redisContext *c, const char* addr, int port, struct t
                 time_left = subtractTimevalMicroSecond(*timeout, elapsed_time);
                 if (_BIO_wait(bio, time_left) != 1) {
                     FILL_SSL_ERR_MSG(c, REDIS_ERR_OTHER, "SSL Error: Failed to connect.");
-                    cleanupSSL( &(c->ssl) );
                     return REDIS_ERR;
                 }
             } else {
                 FILL_SSL_ERR_MSG(c, REDIS_ERR_OTHER,"SSL Error: Failed to connect");
-                cleanupSSL(&(c->ssl));
                 return REDIS_ERR;
             }
         } else {
@@ -637,7 +624,6 @@ int redisContextConnectSSL(redisContext *c, const char* addr, int port, struct t
             elapsed_time = subtractTimeval( cur_time, start_time );
             if (compareTimeval(elapsed_time, *timeout) > 0) {
                 FILL_SSL_ERR_MSG(c, REDIS_ERR_OTHER, "SSL Error: Connection time out before handshake");
-                cleanupSSL( &(c->ssl) );
                 return REDIS_ERR;
             }
         }
@@ -648,7 +634,6 @@ int redisContextConnectSSL(redisContext *c, const char* addr, int port, struct t
                 time_left = subtractTimevalMicroSecond( *timeout, elapsed_time);
                 if (_BIO_wait(bio, time_left) != 1) {
                     FILL_SSL_ERR_MSG(c,REDIS_ERR_OTHER,"SSL Error: handshake failure");
-                    cleanupSSL( &(c->ssl) );
                     return REDIS_ERR;
                 }
             }
@@ -677,11 +662,8 @@ int redisContextConnectSSL(redisContext *c, const char* addr, int port, struct t
 
     } else {
         FILL_SSL_ERR_MSG(c,REDIS_ERR_OTHER,"SSL Error: Error retrieving peer certificate.\n" );
-        cleanupSSL( &(c->ssl) );
         return REDIS_ERR;
     }
-
-    printf("verify done");
 
     BIO_set_nbio(bio,is_nonblocking);
 
@@ -690,14 +672,23 @@ int redisContextConnectSSL(redisContext *c, const char* addr, int port, struct t
     return REDIS_OK;
 }
 
-void cleanupSSL(SSLConnection *conn) {
 
+void cleanupSSLCtx(SSLConnection *conn)
+{
     if (!conn) return;
 
     if (conn->ctx) {
         SSL_CTX_free(conn->ctx);
         conn->ctx = NULL;
     }
+
+    return;
+}
+
+void cleanupSSLConnect(SSLConnection *conn)
+{
+
+    if (!conn) return;
 
     if (conn->bio) {
         BIO_free_all(conn->bio);
@@ -708,6 +699,14 @@ void cleanupSSL(SSLConnection *conn) {
         free(conn->conn_str);
         conn->conn_str = NULL;
     }
+
+    return;
+}
+
+void cleanupSSL(SSLConnection *conn)
+{
+    cleanupSSLCtx(conn);
+    cleanupSSLConnect(conn);
 
     return;
 }

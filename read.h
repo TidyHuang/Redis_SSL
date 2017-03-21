@@ -34,6 +34,12 @@
 #define __HIREDIS_READ_H
 #include <stdio.h> /* for size_t */
 
+#define INIT_SSL_CTX_ERR  -2
+#define INIT_SSL_CERT_ERR -3
+#define INIT_SSL_KEY_ERR  -4
+#define INIT_SSL_CERT_VERIFY_ERR -5
+#define INIT_SSL_VERIFY_LOCATION_ERR -6
+
 #define REDIS_ERR -1
 #define REDIS_OK 0
 

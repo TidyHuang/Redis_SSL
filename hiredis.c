@@ -657,7 +657,9 @@ int redisReconnect(redisContext *c) {
     c->obuf = sdsempty();
     c->reader = redisReaderCreate();
 
-    if (c->connection_type == REDIS_CONN_TCP) {
+    if (c->connection_type == REDIS_CONN_SSL) {
+        return redisContextConnectSSL(c, c->tcp.host, c->tcp.port, c->timeout);
+    } else if (c->connection_type == REDIS_CONN_TCP) {
         return redisContextConnectBindTcp(c, c->tcp.host, c->tcp.port,
                 c->timeout, c->tcp.source_addr);
     } else if (c->connection_type == REDIS_CONN_UNIX) {
@@ -685,11 +687,98 @@ redisContext *redisConnect(const char *ip, int port, int ssl,
     c->flags |= REDIS_BLOCK;
 
     if (ssl) {
-        redisContextConnectSSL(c,ip,port,NULL,certfile,keyfile,CAfile,certdir);
+        if (initSSLCtx(&(c->ssl), certfile, keyfile, CAfile, certdir) == 0) {
+            redisContextConnectSSL(c,ip,port,NULL);
+        } else {
+            redisFree(c);
+            return NULL;
+        }
+        c->connection_type = REDIS_CONN_SSL;
     } else {
         redisContextConnectTcp(c,ip,port,NULL);
     }
     return c;
+}
+
+redisContext * redisConnectContextInit(int ssl, const char*certfile, const char*keyfile,
+        const char *CAfile, const char*certdir)
+{
+    redisContext *c = redisContextInit();
+    if (c == NULL) {
+        return NULL;
+    }
+
+    c->flags |= REDIS_BLOCK;
+
+    if (ssl) {
+        if (initSSLCtx(&(c->ssl), certfile, keyfile, CAfile, certdir) == 0) {
+            c->connection_type = REDIS_CONN_SSL;
+        } else {
+            redisFree(c);
+            c = NULL;
+        }
+    }
+
+    return c;
+}
+
+int redisConnectEstab(redisContext *ctx, const char *ip, int port, const struct timeval tv)
+{
+    if (ctx == NULL) return REDIS_ERR;
+
+    int status = REDIS_OK;
+
+    if (ctx->ssl.ctx) {
+        status = redisContextConnectSSL(ctx, ip, port, &tv);
+    } else {
+        status = redisContextConnectTcp(ctx, ip, port, &tv);
+    }
+
+    if (status == REDIS_OK) {
+        redisEnableKeepAlive(ctx);
+    } else {
+        redisConnectClose(ctx);
+    }
+
+    return status;
+}
+
+int redisConnectClose(redisContext *c)
+{
+    if (c->ssl.ctx) {
+        cleanupSSLConnect(&(c->ssl));
+    }
+
+    if (c->fd > 0)
+        close(c->fd);
+    if (c->tcp.host)
+        free(c->tcp.host);
+    if (c->tcp.source_addr)
+        free(c->tcp.source_addr);
+    if (c->unix_sock.path)
+        free(c->unix_sock.path);
+    if (c->timeout)
+        free(c->timeout);
+
+    c->err = 0;
+
+    return 0;
+}
+
+void redisConnectContextUninit(redisContext *c)
+{
+    if (c->obuf != NULL)
+        sdsfree(c->obuf);
+    if (c->reader != NULL)
+        redisReaderFree(c->reader);
+
+    if (c->ssl.ctx) {
+        cleanupSSLCtx(&(c->ssl));
+    }
+
+    free(c);
+
+    return;
 }
 
 redisContext *redisConnectWithTimeout(const char *ip, int port, const struct timeval tv,
@@ -703,7 +792,12 @@ redisContext *redisConnectWithTimeout(const char *ip, int port, const struct tim
     c->flags |= REDIS_BLOCK;
 
     if (ssl) {
-        redisContextConnectSSL(c,ip,port,NULL,certfile,keyfile,CAfile,certdir);
+        if (initSSLCtx(&(c->ssl), certfile, keyfile, CAfile, certdir) == 0) {
+            redisContextConnectSSL(c,ip,port,NULL);
+        } else {
+            redisFree(c);
+            return NULL;
+        }
     } else {
         redisContextConnectTcp(c,ip,port,NULL);
     }
@@ -721,7 +815,12 @@ redisContext *redisConnectNonBlock(const char *ip, int port, int ssl, char *cert
     c->flags &= ~REDIS_BLOCK;
 
     if (ssl) {
-        redisContextConnectSSL(c,ip,port,NULL,certfile,keyfile,CAfile,certdir);
+        if (initSSLCtx(&(c->ssl), certfile, keyfile, CAfile, certdir) == 0) {
+            redisContextConnectSSL(c,ip,port,NULL);
+        } else {
+            redisFree(c);
+            return NULL;
+        }
     } else {
         redisContextConnectTcp(c,ip,port,NULL);
     }
@@ -736,7 +835,12 @@ redisContext *redisConnectBindNonBlock(const char *ip, int port,
     c->flags &= ~REDIS_BLOCK;
 
     if (ssl) {
-        redisContextConnectSSL(c, ip, port, NULL, certfile, keyfile, CAfile, certdir);
+        if (initSSLCtx(&(c->ssl), certfile, keyfile, CAfile, certdir) == 0) {
+            redisContextConnectSSL(c,ip,port,NULL);
+        } else {
+            redisFree(c);
+            return NULL;
+        }
     } else {
         redisContextConnectBindTcp(c,ip,port,NULL,source_addr);
     }
@@ -752,7 +856,12 @@ redisContext *redisConnectBindNonBlockWithReuse(const char *ip, int port,
     c->flags |= REDIS_REUSEADDR;
 
     if (ssl) {
-        redisContextConnectSSL(c, ip, port, NULL, certfile, keyfile, CAfile, certdir);
+        if (initSSLCtx(&(c->ssl), certfile, keyfile, CAfile, certdir) == 0) {
+            redisContextConnectSSL(c,ip,port,NULL);
+        } else {
+            redisFree(c);
+            return NULL;
+        }
     } else {
         redisContextConnectBindTcp(c,ip,port,NULL,source_addr);
     }

@@ -47,14 +47,20 @@ int redisContextConnectTcp(redisContext *c, const char *addr, int port, const st
 int redisContextConnectBindTcp(redisContext *c, const char *addr, int port,
                                const struct timeval *timeout,
                                const char *source_addr);
+
 int redisContextConnectUnix(redisContext *c, const char *path, const struct timeval *timeout);
 int redisKeepAlive(redisContext *c, int interval);
 
-int redisContextConnectSSL(redisContext *c, const char* addr, int port, struct timeval *timeout,
-        char *certFile, char *keyFile,
-        char *CAFile, char *certdir);
+int redisContextConnectSSL(redisContext *c, const char* addr, int port, const struct timeval *timeout);
 
 void cleanupSSL(SSLConnection* ctn);
+
+int initSSLCtx(SSLConnection *ssl, const char *certfile, const char *keyfile, 
+        const char *CAfile, const char *certdir);
+
+void cleanupSSLCtx(SSLConnection *ssl);
+void cleanupSSLConnect(SSLConnection *ssl);
+
 void setupSSL(void);
 
 #endif
