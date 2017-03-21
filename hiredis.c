@@ -735,7 +735,10 @@ int redisConnectEstab(redisContext *ctx, const char *ip, int port, const struct 
     }
 
     if (status == REDIS_OK) {
-        redisEnableKeepAlive(ctx);
+        if (ctx->ssl.ctx) {
+        } else {
+            redisEnableKeepAlive(ctx);
+        }
     } else {
         redisConnectClose(ctx);
     }
